@@ -9,7 +9,7 @@ https://docs.djangoproject.com/en/5.2/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
-
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -25,8 +25,11 @@ SECRET_KEY = 'django-insecure-j^_wtkw$np9_9=arrol*gob@bnom04d(&e11$%+^akjr+2(e%$
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
-
+ALLOWED_HOSTS = [
+    "127.0.0.1",
+    "localhost",
+    ".trycloudflare.com"
+]
 
 # Application definition
 
@@ -38,6 +41,8 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    'AppointmentCreate',
+    'ContactsCreate',
     'payments',
 ]
 
@@ -122,3 +127,19 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+BASE_GHL_URL = 'https://services.leadconnectorhq.com'
+GHL_ACCESS_TOKEN = os.getenv("GHL_ACCESS_TOKEN") 
+
+GHL_API_KEY = os.getenv("GHL_API_KEY") 
+GHL_LOCATION_ID = os.getenv("GHL_LOCATION_ID") 
+CSRF_TRUSTED_ORIGINS = [
+    "https://*.trycloudflare.com",
+    "http://localhost",
+    "http://127.0.0.1"
+] 
+
+CORS_ALLOWED_ORIGINS = [
+    "https://*.trycloudflare.com",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]

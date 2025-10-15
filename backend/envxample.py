@@ -1,0 +1,11 @@
+H
+L_ACCESS_TOKEN=""
+GHL_REFRESH_TOKEN =""
+GHL_API_KEY=""
+GHL_LOCATION_ID="" 
+
+# Mercado Pago (sandbox)
+MP_ACCESS_TOKEN=""
+MP_PUBLIC_KEY=""
+MP_BASE_URL=""
+DEBUG=True

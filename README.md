@@ -30,12 +30,25 @@ Cuando el pago se **apruebe**, el sistema actualizará al **contacto en GHL** (p
     "description": "Cita ReflexoPerú"
   }
 
-###### Base de Datoa guarda
-appointmentId | contactId | preference_id | amount | status
-------------------------------------------------------------
-A123          | RzNZvdktZo8DHYMH6xyj | PREF-123 | 50.0 | pending
 
-### Diagrama estilo ASCII del CASO MERCADO PAGO + GHL (Pago y confirmación automática)
+### FLUJO DE CASO DE USO 
+1️⃣ Usuario reserva cita  →  Se crea Appointment (local + GHL)
+
+2️⃣ Se genera link de pago (Mercado Pago sandbox)
+    → Se guarda en PaymentPreference:
+       - appointment_id = appointment.ghl_id
+       - contact_id = contact.ghl_id
+       - init_point = link de pago
+       - status = "pending"
+
+3️⃣ Usuario paga → Mercado Pago envía webhook → Django lo recibe
+    → Django marca el pago como "paid":
+         payment.mark_paid(payment_id)
+
+4️⃣ Django actualiza en GHL:
+    → add_tag_to_contact(contact_id, "pago_confirmado")
+    → set_custom_field(contact_id, "payment_status", "paid")
+
 
 ┌──────────────────────────────────────────────┐
 │ 1. Requisitos                                │
