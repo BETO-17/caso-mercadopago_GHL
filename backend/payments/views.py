@@ -10,11 +10,14 @@ from .models import PaymentPreference
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.parsers import JSONParser
+from dotenv import load_dotenv 
 
+
+# Cargar variables .env
+load_dotenv()
 
 MP_ACCESS_TOKEN = os.getenv("MP_ACCESS_TOKEN")
 MP_BASE = os.getenv("MP_BASE_URL", "https://api.mercadopago.com")
-
 
 # crear preferencia de pago en MP y guardar en BD
 class CreatePaymentView(APIView):
@@ -37,8 +40,16 @@ class CreatePaymentView(APIView):
                 "appointment_id": data["appointmentId"], 
                 "contact_id": data["contactId"]
             },
-            "notification_url": f"{os.getenv('APP_PUBLIC_URL')}/webhooks/mp"
+            "back_urls": {
+        "success": f"{os.getenv('APP_PUBLIC_URL')}/payments/success",
+        "failure": f"{os.getenv('APP_PUBLIC_URL')}/payments/failure",
+        "pending": f"{os.getenv('APP_PUBLIC_URL')}/payments/pending"
+    },
+    "auto_return": "approved",
+    "notification_url": f"{os.getenv('APP_PUBLIC_URL')}/payments/webhooks/mp"
         }
+
+
         headers = {
             "Authorization": f"Bearer {MP_ACCESS_TOKEN}", 
             "Content-Type": "application/json"
