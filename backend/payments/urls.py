@@ -1,7 +1,8 @@
 # payments/urls.py
 from django.urls import path
-from .views import CreatePaymentView, MPWebhookView  # ver webhook abajo
+from .views import CreatePaymentView, MPWebhookView, ReconcilePaymentsView # ver webhook abajo
 from django.http import JsonResponse
+
 
 
 # === Vistas simples para back_urls ===
@@ -20,6 +21,8 @@ urlpatterns = [
     path("create/", CreatePaymentView.as_view(), name="payments-create"),
     # Webhook (recibe notificaciones de Mercado Pago)
     path("webhooks/mp", MPWebhookView.as_view(), name="mp-webhook"),  # ver webhook abajo
+    # Reconciliación de pagos
+    path("reconcile/", ReconcilePaymentsView.as_view(), name="reconcile"),
     # Rutas de retorno (back_urls)
     path('success', payment_success, name='payment_success'),
     path('failure', payment_failure, name='payment_failure'),

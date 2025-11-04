@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     'AppointmentCreate',
     'ContactsCreate',
     'payments',
+    'ghl_oauth',
 ]
 
 MIDDLEWARE = [
@@ -129,6 +130,11 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 BASE_GHL_URL = 'https://services.leadconnectorhq.com'
 GHL_ACCESS_TOKEN = os.getenv("GHL_ACCESS_TOKEN") 
+
+GHL_CLIENT_ID = os.getenv("GHL_CLIENT_ID") 
+GHL_CLIENT_SECRET = os.getenv("GHL_CLIENT_SECRET")
+GHL_REDIRECT_URI = os.getenv("GHL_REDIRECT_URI")
+
 
 GHL_API_KEY = os.getenv("GHL_API_KEY") 
 GHL_LOCATION_ID = os.getenv("GHL_LOCATION_ID") 

@@ -10,15 +10,21 @@ from .models import PaymentPreference
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.parsers import JSONParser
-from dotenv import load_dotenv 
+from dotenv import load_dotenv, find_dotenv
+from payments.reconcile import reconcile_payments
 
 
 # Cargar variables .env
-load_dotenv()
+load_dotenv(find_dotenv())
 
 MP_ACCESS_TOKEN = os.getenv("MP_ACCESS_TOKEN")
+if not MP_ACCESS_TOKEN:
+    # 🛑 Detiene la aplicación si el token crítico no está disponible
+    raise EnvironmentError("❌ La variable de entorno MP_ACCESS_TOKEN no está definida.")
+
 MP_BASE = os.getenv("MP_BASE_URL", "https://api.mercadopago.com")
 
+# 💡 AÑADIR ESTA LÍNEA TEMPORALMENTE
 # crear preferencia de pago en MP y guardar en BD
 class CreatePaymentView(APIView):
     def post(self, request):
@@ -48,7 +54,6 @@ class CreatePaymentView(APIView):
     "auto_return": "approved",
     "notification_url": f"{os.getenv('APP_PUBLIC_URL')}/payments/webhooks/mp"
         }
-
 
         headers = {
             "Authorization": f"Bearer {MP_ACCESS_TOKEN}", 
@@ -101,6 +106,9 @@ class MPWebhookView(APIView):
 
             if not payment_id:
                 return Response({"ok": True}, status=200)
+            
+            # 🔎 DEBUG AÑADIDO: Muestra los primeros 10 caracteres del token para confirmar su carga
+            print(f"DEBUG TOKEN (MPWebhookView): {MP_ACCESS_TOKEN[:10] if MP_ACCESS_TOKEN else 'NONE/EMPTY'}")
 
             # consultar MP para detalle payment
             headers = {"Authorization": f"Bearer {MP_ACCESS_TOKEN}"}
@@ -159,3 +167,10 @@ class MPWebhookView(APIView):
         except Exception as e:
             print("❌ Error en webhook:", str(e))
             return Response({"error": str(e)}, status=500)
+
+
+# vista para reconciliar pagos 
+class ReconcilePaymentsView(APIView):
+    def get(self, request):
+        discrepancies = reconcile_payments()
+        return Response({"differences": discrepancies})

@@ -23,4 +23,5 @@ urlpatterns = [
     path('api/contacts/', include('ContactsCreate.urls')),
     path('api/payments/', include('payments.urls')),
     path("payments/", include("payments.urls")),
+    path('', include('ghl_oauth.urls')),
 ]
