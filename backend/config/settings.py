@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     'ContactsCreate',
     'payments',
     'ghl_oauth',
+    'mp_oauth',
 ]
 
 MIDDLEWARE = [

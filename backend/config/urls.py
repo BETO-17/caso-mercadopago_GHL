@@ -24,4 +24,5 @@ urlpatterns = [
     path('api/payments/', include('payments.urls')),
     path("payments/", include("payments.urls")),
     path('', include('ghl_oauth.urls')),
+    path('', include('mp_oauth.urls')),
 ]
