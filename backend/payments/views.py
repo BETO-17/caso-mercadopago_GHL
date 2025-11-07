@@ -2,6 +2,7 @@
 import os
 import requests
 from django.conf import settings
+from django.http import HttpResponseRedirect
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -12,27 +13,53 @@ from django.views.decorators.csrf import csrf_exempt
 from rest_framework.parsers import JSONParser
 from dotenv import load_dotenv, find_dotenv
 from payments.reconcile import reconcile_payments
+import logging
 
-
-# Cargar variables .env
 load_dotenv(find_dotenv())
+
+logger = logging.getLogger(__name__)
 
 MP_ACCESS_TOKEN = os.getenv("MP_ACCESS_TOKEN")
 if not MP_ACCESS_TOKEN:
-    # 🛑 Detiene la aplicación si el token crítico no está disponible
     raise EnvironmentError("❌ La variable de entorno MP_ACCESS_TOKEN no está definida.")
 
 MP_BASE = os.getenv("MP_BASE_URL", "https://api.mercadopago.com")
 
-# 💡 AÑADIR ESTA LÍNEA TEMPORALMENTE
-# crear preferencia de pago en MP y guardar en BD
+# Crear preferencia de pago en MP y guardar en BD
 class CreatePaymentView(APIView):
+    def get(self, request):
+        # GET: DRF UI con example, prellenado si ?appointment_id=
+        appointment_id = request.GET.get('appointment_id')
+        payment_data = {}
+        if appointment_id:
+            try:
+                appointment = Appointment.objects.get(id=appointment_id)
+                payment_data = {
+                    "appointment_id": appointment.id,
+                    "contact_id": appointment.contact.id,
+                    "amount": 50.00,  # E.g., monto fijo o de custom field
+                    "description": f"Pago por cita: {appointment.title} - {appointment.start_time}"
+                }
+            except Appointment.DoesNotExist:
+                pass
+        return Response({
+            "message": "Usa POST para crear preferencia de pago (requiere appointment_id).",
+            "example_data": {
+                "appointment_id": appointment_id or "",
+                "amount": 50.00,  # Monto en PEN
+                "description": "Pago por consulta",
+                "contact_id": "ghl_contact_id"
+            },
+            "payment_info": payment_data,  # Previsualiza
+            "hint": "Monto en PEN. Post-pago, MP redirige a back_urls."
+        })
+
     def post(self, request):
         serializer = CreatePaymentSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        # preparar payload preferencia
+        # Preparar payload preferencia
         items = [{
             "title": data["description"],
             "quantity": 1,
@@ -43,134 +70,98 @@ class CreatePaymentView(APIView):
             "items": items,
             "external_reference": f"appointment_{data['appointmentId']}",
             "metadata": {
-                "appointment_id": data["appointmentId"], 
+                "appointment_id": data["appointmentId"],
                 "contact_id": data["contactId"]
             },
             "back_urls": {
-        "success": f"{os.getenv('APP_PUBLIC_URL')}/payments/success",
-        "failure": f"{os.getenv('APP_PUBLIC_URL')}/payments/failure",
-        "pending": f"{os.getenv('APP_PUBLIC_URL')}/payments/pending"
-    },
-    "auto_return": "approved",
-    "notification_url": f"{os.getenv('APP_PUBLIC_URL')}/payments/webhooks/mp"
+                "success": f"{settings.APP_PUBLIC_URL}/payments/success",
+                "failure": f"{settings.APP_PUBLIC_URL}/payments/failure",
+                "pending": f"{settings.APP_PUBLIC_URL}/payments/pending"
+            },
+            "auto_return": "approved",
+            "notification_url": f"{settings.APP_PUBLIC_URL}/api/payments/webhooks/mp"
         }
 
         headers = {
-            "Authorization": f"Bearer {MP_ACCESS_TOKEN}", 
+            "Authorization": f"Bearer {MP_ACCESS_TOKEN}",
             "Content-Type": "application/json"
         }
 
         r = requests.post(f"{MP_BASE}/checkout/preferences", json=payload, headers=headers)
-        if r.status_code not in (200, 201):
-            return Response({"error": "MP error", "details": r.text}, status=500)
-        
-        resp = r.json()
-        pref_id = resp.get("id")
-        init_point = resp.get("init_point")
-        sandbox_init_point = resp.get("sandbox_init_point")
+        if r.status_code == 201:
+            result = r.json()
+            preference_id = result["id"]
+            init_point = result["init_point"]
 
-        # guardar en BD
-        p = PaymentPreference.objects.create(
-            appointment_id=data["appointmentId"],
-            contact_id=data["contactId"],
-            preference_id=pref_id,
-            init_point=init_point or sandbox_init_point,
-            amount=data["amount"],
-            status="pending"
-        )
+            # Guardar en DB
+            pref = PaymentPreference.objects.create(
+                appointment_id=data["appointmentId"],
+                contact_id=data["contactId"],
+                preference_id=preference_id,
+                amount=data["amount"],
+                init_point=init_point
+            )
 
-        # ✅ Devuelve ambos (para pruebas y producción)
-        return Response({
-            "sandbox_init_point": sandbox_init_point,
-            "init_point": init_point, 
-            "preference_id": pref_id
+            return Response({
+                "message": "Preferencia creada correctamente",
+                "preference_id": preference_id,
+                "init_point": init_point,  # Link a MP checkout
+                "next_step": "Redirige usuario a init_point para pagar."
             })
+        else:
+            return Response({
+                "error": "Error en Mercado Pago",
+                "details": r.text
+            }, status=status.HTTP_400_BAD_REQUEST)
 
-
-# webhook para notificaciones de Mercado Pago
-@method_decorator(csrf_exempt, name='dispatch')
+# Webhook para recibir notificaciones de MP
 class MPWebhookView(APIView):
-    parser_classes = [JSONParser]
-
+    @method_decorator(csrf_exempt)
     def post(self, request):
-        payload = request.data
-        # Mercado Pago puede enviar distintos shapes; lo común: data.id (payment id) o type=payment + data.id
-        # Normalmente webhook trae: {"id": 123, "type": "payment"}, luego consultamos detalle
         try:
-            # extraer payment id robustamente
-            payment_id = None
-            if "data" in payload and isinstance(payload["data"], dict) and payload["data"].get("id"):
-                payment_id = payload["data"]["id"]
-            elif payload.get("id"):
-                payment_id = payload.get("id")
+            data = request.data
+            payment_id = data.get("id")
+            status_mp = data.get("status")
+            external_ref = data.get("external_reference")
 
-            if not payment_id:
-                return Response({"ok": True}, status=200)
-            
-            # 🔎 DEBUG AÑADIDO: Muestra los primeros 10 caracteres del token para confirmar su carga
-            print(f"DEBUG TOKEN (MPWebhookView): {MP_ACCESS_TOKEN[:10] if MP_ACCESS_TOKEN else 'NONE/EMPTY'}")
-
-            # consultar MP para detalle payment
-            headers = {"Authorization": f"Bearer {MP_ACCESS_TOKEN}"}
-            r = requests.get(f"{MP_BASE}/v1/payments/{payment_id}", headers=headers)
-
-            # ⚠️ Evita 500 en simulaciones o pagos no encontrados
-            if r.status_code != 200:
-                print(f"⚠️ Mercado Pago devolvió {r.status_code} para payment_id={payment_id}")
-                print("Respuesta:", r.text)
-                # responder 200 para no repetir el intento del webhook
-                return Response({"ok": True, "note": "payment not found or simulated"}, status=200)
-            
-            payment = r.json()
-            status_mp = payment.get("status")
-            external_ref = payment.get("external_reference") or payment.get("metadata", {}).get("external_reference")
-
-            # mapping external_reference -> preference / appointment
-            # external_ref puede ser "appointment_12345"
+            # Mapping external_reference -> preference / appointment
             appointment_id = None
             if external_ref and external_ref.startswith("appointment_"):
                 appointment_id = external_ref.replace("appointment_", "")
 
-            # Buscar la preferencia por external reference o por payment.preference_id si lo guardaste
-            # Mejor: busca por appointment_id
-            pref = None
-            if appointment_id:
-                pref = PaymentPreference.objects.filter(appointment_id=appointment_id).first()
-            # fallback: buscar por payment.preference_id en payment['preference_id']
-            if not pref and payment.get("preference_id"):
-                pref = PaymentPreference.objects.filter(preference_id=payment.get("preference_id")).first()
-
+            # Buscar la preferencia por appointment_id
+            pref = PaymentPreference.objects.filter(appointment_id=appointment_id).first()
             if not pref:
-                # guarda log o crea registro mínimo
-                print("⚠️ Preferencia no encontrada para:", external_ref)
-                return Response({"message": "preference not found"}, status=404)
+                logger.warning(f"Preferencia no encontrada para {external_ref}")
+                return Response({"message": "preferencia no encontrada"}, status=404)
 
-            # Idempotencia: si payment_id ya fue procesado
+            # Idempotencia: si ya procesado
             if pref.payment_id == str(payment_id) or pref.status == "paid":
                 return Response({"ok": True}, status=200)
 
             if status_mp == "approved":
-                pref.mark_paid(payment_id=str(payment_id))
-                print(f"✅ Pago aprobado: {payment_id}")
+                pref.payment_id = str(payment_id)
+                pref.status = "paid"
+                pref.save()
 
-                # llamar a GHL para actualizar contacto (ver gh_client)
-                from ..ghlmp_updates.ghl_client import add_tag_to_contact
+                # Sync con GHL
                 add_tag_to_contact(pref.contact_id, "pago_confirmado")
+                set_custom_field(pref.contact_id, "payment_status", "paid")
+                logger.info(f"✅ Pago aprobado: {payment_id}")
+
             else:
-                # actualizar estado local si quieres
                 pref.status = status_mp
                 pref.save()
-                print(f"ℹ️ Pago actualizado a estado {status_mp}")
+                logger.info(f"ℹ️ Pago actualizado a {status_mp}")
 
             return Response({"ok": True}, status=200)
-
         except Exception as e:
-            print("❌ Error en webhook:", str(e))
+            logger.error(f"Error en webhook MP: {e}")
             return Response({"error": str(e)}, status=500)
 
-
-# vista para reconciliar pagos 
+# Vista para reconciliar pagos
 class ReconcilePaymentsView(APIView):
     def get(self, request):
         discrepancies = reconcile_payments()
-        return Response({"differences": discrepancies})
+        return Response({"discrepancies": discrepancies})
+    

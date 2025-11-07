@@ -23,6 +23,7 @@ urlpatterns = [
     path('api/contacts/', include('ContactsCreate.urls')),
     path('api/payments/', include('payments.urls')),
     path("payments/", include("payments.urls")),
-    path('', include('ghl_oauth.urls')),
-    path('', include('mp_oauth.urls')),
+    path('', include('ghl_oauth.urls')),  # Prefix para GHL
+    path('mp_oauth/', include('mp_oauth.urls')),    # Prefix para MP
+    path('api/appointmentcreate/', include('AppointmentCreate.urls')),  # Para /api/appointmentcreate/create/
 ]

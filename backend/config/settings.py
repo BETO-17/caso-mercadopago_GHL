@@ -11,16 +11,20 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 import os
 from pathlib import Path
+from dotenv import load_dotenv  # Para cargar .env
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Carga el archivo .env (debe estar en la raíz del proyecto)
+load_dotenv()  # Esto lee GHL_CLIENT_ID, MP_CLIENT_ID, etc., desde .env
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-j^_wtkw$np9_9=arrol*gob@bnom04d(&e11$%+^akjr+2(e%$'
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-j^_wtkw$np9_9=arrol*gob@bnom04d(&e11$%+^akjr+2(e%$')  # De .env si existe
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -50,7 +54,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.contrib.sessions.middleware.SessionMiddleware',  # Bueno para nuestro flujo
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -129,20 +133,42 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# NUEVO: Logging para debug (temporal, para ver DEBUG MP en consola)
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'loggers': {
+        '': {  # Root logger
+            'handlers': ['console'],
+            'level': 'INFO',
+        },
+    },
+}
+
+# GHL Config (ya lo tenías, pero unificado)
 BASE_GHL_URL = 'https://services.leadconnectorhq.com'
 GHL_ACCESS_TOKEN = os.getenv("GHL_ACCESS_TOKEN") 
-
 GHL_CLIENT_ID = os.getenv("GHL_CLIENT_ID") 
 GHL_CLIENT_SECRET = os.getenv("GHL_CLIENT_SECRET")
 GHL_REDIRECT_URI = os.getenv("GHL_REDIRECT_URI")
-
-
 GHL_API_KEY = os.getenv("GHL_API_KEY") 
 GHL_LOCATION_ID = os.getenv("GHL_LOCATION_ID") 
+
+# Mercado Pago Config (faltaba esto)
+MP_CLIENT_ID = os.getenv("MP_CLIENT_ID")
+MP_CLIENT_SECRET = os.getenv("MP_CLIENT_SECRET")
+MP_REDIRECT_URI = os.getenv("MP_REDIRECT_URI")
+
 CSRF_TRUSTED_ORIGINS = [
     "https://*.trycloudflare.com",
-    "http://localhost",
-    "http://127.0.0.1"
+    "http://localhost:8000",  # Agregué puerto para dev
+    "http://127.0.0.1:8000"
 ] 
 
 CORS_ALLOWED_ORIGINS = [
